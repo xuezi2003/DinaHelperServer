@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Float
 from app.db.session import Base
-from datetime import datetime
 
 class Student(Base):
     __tablename__ = "student"
@@ -32,11 +31,4 @@ class CourseScore(Base):
     cCredit = Column("c_credit", Float)
     cPass = Column("c_pass", Integer)  # 0-正常 1-补考 2-重修 3-刷分
 
-
-class UserFeedback(Base):
-    __tablename__ = "user_feedback"
-    id = Column("id", Integer, primary_key=True, autoincrement=True)
-    studentId = Column("s_id", String(50))
-    content = Column("content", String(255))
-    createTime = Column("create_time", DateTime, default=datetime.now)
 

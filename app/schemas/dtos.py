@@ -29,9 +29,6 @@ class SameNameDTO(BaseModel):
     sId: str
     sMajor: str
 
-class UserFeedbackDTO(BaseModel):
-    content: str
-
 class MajorRankItemDTO(BaseModel):
     rank: int
     gpa: float

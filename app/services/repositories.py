@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_, text
-from app.models.models import Student, CourseScore, UserFeedback
+from app.models.models import Student, CourseScore
 from app.schemas.dtos import CourseInfoFilterDTO
 from app.utils.class_utils import get_major_code
 from typing import List, Dict, Any, Optional
@@ -154,11 +154,3 @@ class CourseScoreRepository:
             
         return [row[0] for row in query.order_by(model_attr).all()]
 
-
-class FeedbackRepository:
-    @staticmethod
-    def save_feedback(db: Session, student_id: str, content: str):
-        feedback = UserFeedback(studentId=student_id, content=content)
-        db.add(feedback)
-        db.commit()
-    
