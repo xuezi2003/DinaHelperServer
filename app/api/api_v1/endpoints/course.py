@@ -11,7 +11,7 @@ from app.schemas.result import Result
 router = APIRouter()
 
 @router.get("/query/id", response_model=Result[ScoreQueryDTO])
-def get_score_by_id(sid: str = Query(...), db: Session = Depends(get_db)):
+def get_score_by_id(sid: str = Query(..., max_length=20), db: Session = Depends(get_db)):
     student = StudentService.get_student_by_id(db, sid)
     if not student:
         return Result.error(message="查无此人")
@@ -27,14 +27,14 @@ def get_score_by_id(sid: str = Query(...), db: Session = Depends(get_db)):
     return Result.success(data=query_dto)
 
 @router.get("/name", response_model=Result[List[str]])
-def get_course_name(cname: str = Query(..., alias="cname"), db: Session = Depends(get_db)):
+def get_course_name(cname: str = Query(..., alias="cname", max_length=50), db: Session = Depends(get_db)):
     names = CourseScoreService.get_course_names(db, cname)
     if not names:
         return Result.error(message="没有匹配课程")
     return Result.success(data=names)
 
 @router.get("/filter", response_model=Result[CourseInfoFilterDTO])
-def get_course_info_filter_by_name(courseName: str = Query(...), db: Session = Depends(get_db)):
+def get_course_info_filter_by_name(courseName: str = Query(..., max_length=50), db: Session = Depends(get_db)):
     current_filter = CourseInfoFilterDTO(courseName=courseName)
     options = CourseScoreService.get_dynamic_filter_options(db, current_filter)
     if not options.terms:

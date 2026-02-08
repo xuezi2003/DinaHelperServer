@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, and_, text
+from sqlalchemy import func, case, and_
 from app.models.models import Student, CourseScore
 from app.schemas.dtos import CourseInfoFilterDTO
 from app.utils.class_utils import get_major_code
@@ -71,7 +71,8 @@ class CourseScoreRepository:
     def get_course_names(db: Session, course_name: str) -> List[str]:
         query = db.query(CourseScore.courseName).distinct()
         if course_name:
-            query = query.filter(CourseScore.courseName.like(f"%{course_name}%"))
+            safe_name = course_name.replace('%', '\\%').replace('_', '\\_')
+            query = query.filter(CourseScore.courseName.like(f"%{safe_name}%"))
         return [row[0] for row in query.order_by(CourseScore.courseName).all()]
 
     @staticmethod
