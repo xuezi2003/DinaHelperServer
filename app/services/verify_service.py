@@ -1,10 +1,13 @@
 import json
 import uuid
 import random
+import logging
 from typing import List
 from sqlalchemy.orm import Session
 from app.services.repositories import CourseScoreRepository
 from app.db.redis import get_redis
+
+logger = logging.getLogger(__name__)
 
 CHALLENGE_TTL = 300  # 5 minutes
 SESSION_TTL = 86400  # 24 hours
@@ -14,10 +17,17 @@ FAIL_COOLDOWN = 300  # 5 minutes
 
 class VerifyService:
     @staticmethod
-    def create_challenge(db: Session, sid: str) -> dict:
+    def create_challenge(db: Session, sid: str, client_ip: str = "") -> dict:
+        r = get_redis()
+
+        if client_ip:
+            count = r.get(f"verify_fail:{client_ip}")
+            if count is not None and int(count) >= FAIL_LIMIT:
+                logger.warning(f"Rate limited: ip={client_ip} sid={sid} fails={count}")
+                return {"cooldown": True}
+
         courses = CourseScoreRepository.get_by_student_id(db, sid)
         token = str(uuid.uuid4())
-        r = get_redis()
 
         # 只从最新学期的课程中出题
         if courses:
@@ -54,32 +64,18 @@ class VerifyService:
             r.expire(key, FAIL_COOLDOWN)
 
     @staticmethod
-    def is_rate_limited(client_ip: str) -> bool:
-        r = get_redis()
-        count = r.get(f"verify_fail:{client_ip}")
-        return count is not None and int(count) >= FAIL_LIMIT
-
-    @staticmethod
     def verify_and_consume(token: str, sid: str, answers: List[dict], client_ip: str = ""):
         r = get_redis()
-
-        if client_ip:
-            count = r.get(f"verify_fail:{client_ip}")
-            if count is not None and int(count) >= FAIL_LIMIT:
-                return "cooldown"
-
         raw = r.get(f"challenge:{token}")
         if not raw:
-            if client_ip:
-                VerifyService._incr_fail(r, client_ip)
+            logger.info(f"Verify failed: token not found, sid={sid} ip={client_ip}")
             return False
 
         challenge = json.loads(raw)
 
         if challenge["sid"] != sid:
             r.delete(f"challenge:{token}")
-            if client_ip:
-                VerifyService._incr_fail(r, client_ip)
+            logger.warning(f"Verify failed: sid mismatch, expected={challenge['sid']} got={sid} ip={client_ip}")
             return False
 
         if challenge["verified"]:
@@ -88,6 +84,7 @@ class VerifyService:
             r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
             if client_ip:
                 r.delete(f"verify_fail:{client_ip}")
+            logger.info(f"Verify success (auto): sid={sid} ip={client_ip}")
             return session_token
 
         for q in challenge["questions"]:
@@ -96,11 +93,13 @@ class VerifyService:
                 r.delete(f"challenge:{token}")
                 if client_ip:
                     VerifyService._incr_fail(r, client_ip)
+                logger.info(f"Verify failed: missing answer for '{q['courseName']}', sid={sid} ip={client_ip}")
                 return False
             if int(float(match["score"])) != int(q["score"]):
                 r.delete(f"challenge:{token}")
                 if client_ip:
                     VerifyService._incr_fail(r, client_ip)
+                logger.info(f"Verify failed: wrong score for '{q['courseName']}', sid={sid} ip={client_ip}")
                 return False
 
         r.delete(f"challenge:{token}")
@@ -110,6 +109,7 @@ class VerifyService:
         r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
         if client_ip:
             r.delete(f"verify_fail:{client_ip}")
+        logger.info(f"Verify success: sid={sid} ip={client_ip}")
         return session_token
 
     @staticmethod
