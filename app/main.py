@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.api_v1.api import api_router
 from app.core.config import settings
+from app.db.redis import get_redis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,6 +16,14 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
+
+@app.on_event("startup")
+def flush_redis_cache():
+    try:
+        get_redis().flushdb()
+        logger.info("Redis cache flushed on startup")
+    except Exception as e:
+        logger.warning(f"Failed to flush Redis on startup: {e}")
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):

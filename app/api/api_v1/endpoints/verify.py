@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.student_service import StudentService
@@ -12,6 +12,15 @@ router = APIRouter()
 @router.get("/notice", response_model=Result[str])
 def get_notice():
     return Result.success(data=settings.NOTICE)
+
+@router.get("/debug-ip")
+def debug_ip(request: Request):
+    return {
+        "CF-Connecting-IP": request.headers.get("CF-Connecting-IP"),
+        "X-Forwarded-For": request.headers.get("X-Forwarded-For"),
+        "X-Real-IP": request.headers.get("X-Real-IP"),
+        "client.host": request.client.host
+    }
 
 @router.get("/challenge", response_model=Result[ChallengeResponseDTO])
 def get_challenge(sid: str = Query(..., max_length=20), db: Session = Depends(get_db)):
