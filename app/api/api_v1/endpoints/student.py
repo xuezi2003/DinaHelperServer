@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
@@ -10,15 +10,16 @@ from app.schemas.result import Result
 router = APIRouter()
 
 @router.post("/rank/id")
-def get_rank_by_id(body: VerifiedQueryDTO, db: Session = Depends(get_db)):
+def get_rank_by_id(body: VerifiedQueryDTO, request: Request, db: Session = Depends(get_db)):
     session_token = None
+    client_ip = request.headers.get("CF-Connecting-IP") or request.client.host
 
     if body.sessionToken:
         if not VerifyService.validate_session(body.sessionToken, body.sid):
             return Result.error(message="会话已过期，请重新验证", code=403)
         session_token = body.sessionToken
     else:
-        result = VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers])
+        result = VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers], client_ip)
         if not result:
             return Result.error(message="验证失败，请确认成绩是否正确", code=403)
         session_token = result

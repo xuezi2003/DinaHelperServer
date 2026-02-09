@@ -13,6 +13,8 @@ CHALLENGE_TTL = 300  # 5 minutes
 SESSION_TTL = 86400  # 24 hours
 FAIL_LIMIT = 5
 FAIL_COOLDOWN = 300  # 5 minutes
+CHALLENGE_RATE_LIMIT = 20  # max challenges per window
+CHALLENGE_RATE_WINDOW = 300  # 5 minutes
 
 
 class VerifyService:
@@ -23,7 +25,15 @@ class VerifyService:
         if client_ip:
             count = r.get(f"verify_fail:{client_ip}")
             if count is not None and int(count) >= FAIL_LIMIT:
-                logger.warning(f"Rate limited: ip={client_ip} sid={sid} fails={count}")
+                logger.warning(f"Rate limited (fail): ip={client_ip} sid={sid} fails={count}")
+                return {"cooldown": True}
+
+            rate_key = f"challenge_rate:{client_ip}"
+            rate = r.incr(rate_key)
+            if rate == 1:
+                r.expire(rate_key, CHALLENGE_RATE_WINDOW)
+            if rate > CHALLENGE_RATE_LIMIT:
+                logger.warning(f"Rate limited (freq): ip={client_ip} sid={sid} rate={rate}")
                 return {"cooldown": True}
 
         courses = CourseScoreRepository.get_by_student_id(db, sid)
@@ -82,8 +92,6 @@ class VerifyService:
             r.delete(f"challenge:{token}")
             session_token = str(uuid.uuid4())
             r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
-            if client_ip:
-                r.delete(f"verify_fail:{client_ip}")
             logger.info(f"Verify success (auto): sid={sid} ip={client_ip}")
             return session_token
 
@@ -107,8 +115,6 @@ class VerifyService:
         # 验证成功，生成 sessionToken
         session_token = str(uuid.uuid4())
         r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
-        if client_ip:
-            r.delete(f"verify_fail:{client_ip}")
         logger.info(f"Verify success: sid={sid} ip={client_ip}")
         return session_token
 
