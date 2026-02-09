@@ -1,15 +1,10 @@
+import json
 import uuid
-import time
 import random
-from typing import Dict, List, Optional
+from typing import List
 from sqlalchemy.orm import Session
 from app.services.repositories import CourseScoreRepository
-
-# In-memory token store: {token: {sid, questions, verified, expires_at}}
-_challenge_store: Dict[str, dict] = {}
-
-# Session token store: {sessionToken: {sid, expires_at}}
-_session_store: Dict[str, dict] = {}
+from app.db.redis import get_redis
 
 CHALLENGE_TTL = 300  # 5 minutes
 SESSION_TTL = 86400  # 24 hours
@@ -20,6 +15,7 @@ class VerifyService:
     def create_challenge(db: Session, sid: str) -> dict:
         courses = CourseScoreRepository.get_by_student_id(db, sid)
         token = str(uuid.uuid4())
+        r = get_redis()
 
         # 只从最新学期的课程中出题
         if courses:
@@ -29,23 +25,19 @@ class VerifyService:
             latest_courses = []
 
         if len(latest_courses) < 1:
-            _challenge_store[token] = {
+            r.set(f"challenge:{token}", json.dumps({
                 "sid": sid,
                 "questions": [],
-                "verified": True,
-                "expires_at": time.time() + CHALLENGE_TTL
-            }
+                "verified": True
+            }), ex=CHALLENGE_TTL)
             return {"token": token, "questions": []}
 
         selected = random.sample(latest_courses, 1)
-        _challenge_store[token] = {
+        r.set(f"challenge:{token}", json.dumps({
             "sid": sid,
             "questions": [{"courseName": c.courseName, "score": c.score} for c in selected],
-            "verified": False,
-            "expires_at": time.time() + CHALLENGE_TTL
-        }
-
-        VerifyService._cleanup()
+            "verified": False
+        }), ex=CHALLENGE_TTL)
 
         return {
             "token": token,
@@ -54,62 +46,46 @@ class VerifyService:
 
     @staticmethod
     def verify_and_consume(token: str, sid: str, answers: List[dict]):
-        challenge = _challenge_store.get(token)
-        if not challenge:
+        r = get_redis()
+        raw = r.get(f"challenge:{token}")
+        if not raw:
             return False
+
+        challenge = json.loads(raw)
 
         if challenge["sid"] != sid:
-            _challenge_store.pop(token, None)
-            return False
-
-        if time.time() > challenge["expires_at"]:
-            _challenge_store.pop(token, None)
+            r.delete(f"challenge:{token}")
             return False
 
         if challenge["verified"]:
-            _challenge_store.pop(token, None)
+            r.delete(f"challenge:{token}")
             session_token = str(uuid.uuid4())
-            _session_store[session_token] = {
-                "sid": sid,
-                "expires_at": time.time() + SESSION_TTL
-            }
+            r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
             return session_token
 
         for q in challenge["questions"]:
             match = next((a for a in answers if a["courseName"] == q["courseName"]), None)
             if not match:
-                _challenge_store.pop(token, None)
+                r.delete(f"challenge:{token}")
                 return False
             if int(float(match["score"])) != int(q["score"]):
-                _challenge_store.pop(token, None)
+                r.delete(f"challenge:{token}")
                 return False
 
-        _challenge_store.pop(token, None)
+        r.delete(f"challenge:{token}")
 
         # 验证成功，生成 sessionToken
         session_token = str(uuid.uuid4())
-        _session_store[session_token] = {
-            "sid": sid,
-            "expires_at": time.time() + SESSION_TTL
-        }
+        r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
         return session_token
 
     @staticmethod
     def validate_session(session_token: str, sid: str) -> bool:
-        session = _session_store.get(session_token)
-        if not session:
+        r = get_redis()
+        stored_sid = r.get(f"session:{session_token}")
+        if not stored_sid:
             return False
-        if session["sid"] != sid or time.time() > session["expires_at"]:
-            _session_store.pop(session_token, None)
+        if stored_sid != sid:
+            r.delete(f"session:{session_token}")
             return False
         return True
-
-    @staticmethod
-    def _cleanup():
-        now = time.time()
-        expired = [k for k, v in _challenge_store.items() if now > v["expires_at"]]
-        for k in expired:
-            del _challenge_store[k]
-        expired_sessions = [k for k, v in _session_store.items() if now > v["expires_at"]]
-        for k in expired_sessions:
-            del _session_store[k]

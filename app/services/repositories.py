@@ -1,27 +1,68 @@
+from types import SimpleNamespace
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, and_
 from app.models.models import Student, CourseScore
 from app.schemas.dtos import CourseInfoFilterDTO
 from app.utils.class_utils import get_major_code
+from app.db.redis import cache_get, cache_set, make_hash_key
 from typing import List, Dict, Any, Optional
+
+STUDENT_TTL = 3600
+SCORES_TTL = 3600
+RANKING_TTL = 3600
+MAJOR_RANKING_TTL = 3600
+COURSE_NAMES_TTL = 21600
+FAIL_RATE_TTL = 3600
+FILTER_OPTIONS_TTL = 3600
+
+def _student_to_dict(s: Student) -> dict:
+    return {
+        "studentId": s.studentId, "sName": s.sName, "sPy": s.sPy,
+        "sCollege": s.sCollege, "sMajor": s.sMajor, "sGrade": s.sGrade,
+        "sClass": s.sClass, "sAvg": s.sAvg, "sGpa": s.sGpa,
+        "classAvgRank": s.classAvgRank, "classGpaRank": s.classGpaRank,
+        "majorAvgRank": s.majorAvgRank, "majorGpaRank": s.majorGpaRank,
+    }
+
+def _dict_to_student_ns(d: dict) -> SimpleNamespace:
+    return SimpleNamespace(**d)
+
+def _course_to_dict(c: CourseScore) -> dict:
+    return {
+        "studentId": c.studentId, "cTerm": c.cTerm, "courseName": c.courseName,
+        "score": c.score, "cType": c.cType, "cHours": c.cHours,
+        "cCredit": c.cCredit, "cPass": c.cPass,
+    }
 
 class StudentRepository:
     @staticmethod
     def get_by_id(db: Session, student_id: str) -> Optional[Student]:
-        return db.query(Student).filter(Student.studentId == student_id).first()
+        key = f"student:{student_id}"
+        cached = cache_get(key)
+        if cached is not None:
+            return _dict_to_student_ns(cached)
+        student = db.query(Student).filter(Student.studentId == student_id).first()
+        if student:
+            cache_set(key, _student_to_dict(student), STUDENT_TTL)
+        return student
 
     @staticmethod
     def get_ranking(db: Session, student_id: str, scope: str = 'class') -> Dict[str, int]:
         """
         Retrieves pre-calculated rank and total count from the database.
         """
+        key = f"rank:{student_id}:{scope}"
+        cached = cache_get(key)
+        if cached is not None:
+            return cached
+
         student = db.query(Student).filter(Student.studentId == student_id).first()
         if not student:
             return {"avg_rank": 0, "gpa_rank": 0, "total": 0}
             
         if scope == 'class':
             total = db.query(func.count(Student.studentId)).filter(Student.sClass == student.sClass).scalar()
-            return {
+            result = {
                 "avg_rank": student.classAvgRank or 0, 
                 "gpa_rank": student.classGpaRank or 0,
                 "total": total or 0
@@ -29,11 +70,13 @@ class StudentRepository:
         else:
             major_code = get_major_code(student.sClass)
             total = db.query(func.count(Student.studentId)).filter(Student.sClass.like(f"{major_code}%")).scalar()
-            return {
+            result = {
                 "avg_rank": student.majorAvgRank or 0, 
                 "gpa_rank": student.majorGpaRank or 0,
                 "total": total or 0
             }
+        cache_set(key, result, RANKING_TTL)
+        return result
 
     @staticmethod
     def get_by_pinyin(db: Session, pinyin: str) -> List[Student]:
@@ -49,6 +92,11 @@ class StudentRepository:
         Get all students in a major sorted by GPA or AVG.
         major_code is the first 8 characters of s_class.
         """
+        key = f"major_ranking:{major_code}:{sort_by}:{order}"
+        cached = cache_get(key)
+        if cached is not None:
+            return [_dict_to_student_ns(d) for d in cached]
+
         query = db.query(Student).filter(Student.sClass.like(f"{major_code}%"))
         
         if sort_by == 'gpa':
@@ -60,23 +108,45 @@ class StudentRepository:
             query = query.order_by(sort_column.desc())
         else:
             query = query.order_by(sort_column.asc())
-            
-        return query.all()
+        
+        students = query.all()
+        cache_set(key, [_student_to_dict(s) for s in students], MAJOR_RANKING_TTL)
+        return students
 class CourseScoreRepository:
     @staticmethod
     def get_by_student_id(db: Session, student_id: str) -> List[CourseScore]:
-        return db.query(CourseScore).filter(CourseScore.studentId == student_id).all()
+        key = f"scores:{student_id}"
+        cached = cache_get(key)
+        if cached is not None:
+            return [SimpleNamespace(**d) for d in cached]
+        scores = db.query(CourseScore).filter(CourseScore.studentId == student_id).all()
+        if scores:
+            cache_set(key, [_course_to_dict(c) for c in scores], SCORES_TTL)
+        return scores
     
     @staticmethod
     def get_course_names(db: Session, course_name: str) -> List[str]:
+        key = f"course_names:{course_name}"
+        cached = cache_get(key)
+        if cached is not None:
+            return cached
         query = db.query(CourseScore.courseName).distinct()
         if course_name:
             safe_name = course_name.replace('%', '\\%').replace('_', '\\_')
             query = query.filter(CourseScore.courseName.like(f"%{safe_name}%"))
-        return [row[0] for row in query.order_by(CourseScore.courseName).all()]
+        names = [row[0] for row in query.order_by(CourseScore.courseName).all()]
+        cache_set(key, names, COURSE_NAMES_TTL)
+        return names
 
     @staticmethod
     def get_fail_rate_statis(db: Session, filter_dto: CourseInfoFilterDTO) -> Dict[str, Any]:
+        key = make_hash_key("fail_rate",
+            courseName=filter_dto.courseName, terms=filter_dto.terms,
+            colleges=filter_dto.colleges, majors=filter_dto.majors, classes=filter_dto.classes)
+        cached = cache_get(key)
+        if cached is not None:
+            return cached
+
         subq = db.query(
             CourseScore.studentId,
             CourseScore.courseName,
@@ -114,7 +184,9 @@ class CourseScoreRepository:
                 "0-59": 0, "60-69": 0, "70-79": 0, "80-89": 0, "90-100": 0
             }
             
-        return dict(zip(stats._fields, stats))
+        result = {k: int(v) for k, v in zip(stats._fields, stats)}
+        cache_set(key, result, FAIL_RATE_TTL)
+        return result
 
     @staticmethod
     def get_available_options(db: Session, filter_dto: CourseInfoFilterDTO, field: str) -> List[str]:
@@ -122,6 +194,12 @@ class CourseScoreRepository:
         Get available filter options dynamically.
         field should be one of: 'c_term', 's_college', 's_major', 's_class'
         """
+        key = make_hash_key(f"filter_opts:{field}",
+            courseName=filter_dto.courseName, terms=filter_dto.terms,
+            colleges=filter_dto.colleges, majors=filter_dto.majors, classes=filter_dto.classes)
+        cached = cache_get(key)
+        if cached is not None:
+            return cached
         field_mapping = {
             'c_term': (CourseScore, 'cTerm'),
             's_college': (Student, 'sCollege'),
@@ -153,5 +231,7 @@ class CourseScoreRepository:
         if model_class == Student:
             query = query.filter(model_attr.isnot(None), model_attr != '')
             
-        return [row[0] for row in query.order_by(model_attr).all()]
+        options = [row[0] for row in query.order_by(model_attr).all()]
+        cache_set(key, options, FILTER_OPTIONS_TTL)
+        return options
 
