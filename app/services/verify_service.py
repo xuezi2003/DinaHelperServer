@@ -24,7 +24,7 @@ class VerifyService:
         else:
             latest_courses = []
 
-        if len(latest_courses) < 2:
+        if len(latest_courses) < 1:
             _challenge_store[token] = {
                 "sid": sid,
                 "questions": [],
@@ -33,7 +33,7 @@ class VerifyService:
             }
             return {"token": token, "questions": []}
 
-        selected = random.sample(latest_courses, 2)
+        selected = random.sample(latest_courses, 1)
         _challenge_store[token] = {
             "sid": sid,
             "questions": [{"courseName": c.courseName, "score": c.score} for c in selected],
