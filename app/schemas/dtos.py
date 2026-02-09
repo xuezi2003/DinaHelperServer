@@ -49,5 +49,6 @@ class VerifyAnswerItem(BaseModel):
 
 class VerifiedQueryDTO(BaseModel):
     sid: str
-    token: str
+    token: str = ''
     answers: List[VerifyAnswerItem] = []
+    sessionToken: str = ''

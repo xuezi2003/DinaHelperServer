@@ -11,10 +11,19 @@ from app.schemas.result import Result
 
 router = APIRouter()
 
-@router.post("/query/id", response_model=Result[ScoreQueryDTO])
+@router.post("/query/id")
 def get_score_by_id(body: VerifiedQueryDTO, db: Session = Depends(get_db)):
-    if not VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers]):
-        return Result.error(message="验证失败，请确认成绩是否正确", code=403)
+    session_token = None
+
+    if body.sessionToken:
+        if not VerifyService.validate_session(body.sessionToken, body.sid):
+            return Result.error(message="会话已过期，请重新验证", code=403)
+        session_token = body.sessionToken
+    else:
+        result = VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers])
+        if not result:
+            return Result.error(message="验证失败，请确认成绩是否正确", code=403)
+        session_token = result
 
     student = StudentService.get_student_by_id(db, body.sid)
     if not student:
@@ -28,7 +37,7 @@ def get_score_by_id(body: VerifiedQueryDTO, db: Session = Depends(get_db)):
         gpa=student.sGpa,
         dataList=scores_data
     )
-    return Result.success(data=query_dto)
+    return Result.success(data={"sessionToken": session_token, "queryData": query_dto.model_dump()})
 
 @router.get("/name", response_model=Result[List[str]])
 def get_course_name(cname: str = Query(..., alias="cname", max_length=50), db: Session = Depends(get_db)):

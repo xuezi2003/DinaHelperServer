@@ -9,17 +9,26 @@ from app.schemas.result import Result
 
 router = APIRouter()
 
-@router.post("/rank/id", response_model=Result[RankDTO])
+@router.post("/rank/id")
 def get_rank_by_id(body: VerifiedQueryDTO, db: Session = Depends(get_db)):
-    if not VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers]):
-        return Result.error(message="验证失败，请确认成绩是否正确", code=403)
+    session_token = None
+
+    if body.sessionToken:
+        if not VerifyService.validate_session(body.sessionToken, body.sid):
+            return Result.error(message="会话已过期，请重新验证", code=403)
+        session_token = body.sessionToken
+    else:
+        result = VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers])
+        if not result:
+            return Result.error(message="验证失败，请确认成绩是否正确", code=403)
+        session_token = result
 
     student = StudentService.get_student_by_id(db, body.sid)
     if not student:
         return Result.error(message="查无此人")
     
     rank_dto = StudentService.get_student_rank(db, body.sid)
-    return Result.success(data=rank_dto)
+    return Result.success(data={"sessionToken": session_token, "rankData": rank_dto.model_dump()})
 
 @router.get("/query/py", response_model=Result[List[SameNameDTO]])
 def get_students_by_pinyin(spy: str = Query(..., max_length=20), db: Session = Depends(get_db)):

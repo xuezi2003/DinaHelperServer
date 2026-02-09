@@ -8,7 +8,11 @@ from app.services.repositories import CourseScoreRepository
 # In-memory token store: {token: {sid, questions, verified, expires_at}}
 _challenge_store: Dict[str, dict] = {}
 
+# Session token store: {sessionToken: {sid, expires_at}}
+_session_store: Dict[str, dict] = {}
+
 CHALLENGE_TTL = 300  # 5 minutes
+SESSION_TTL = 86400  # 24 hours
 
 
 class VerifyService:
@@ -76,6 +80,23 @@ class VerifyService:
                 return False
 
         _challenge_store.pop(token, None)
+
+        # 验证成功，生成 sessionToken
+        session_token = str(uuid.uuid4())
+        _session_store[session_token] = {
+            "sid": sid,
+            "expires_at": time.time() + SESSION_TTL
+        }
+        return session_token
+
+    @staticmethod
+    def validate_session(session_token: str, sid: str) -> bool:
+        session = _session_store.get(session_token)
+        if not session:
+            return False
+        if session["sid"] != sid or time.time() > session["expires_at"]:
+            _session_store.pop(session_token, None)
+            return False
         return True
 
     @staticmethod
@@ -84,3 +105,6 @@ class VerifyService:
         expired = [k for k, v in _challenge_store.items() if now > v["expires_at"]]
         for k in expired:
             del _challenge_store[k]
+        expired_sessions = [k for k, v in _session_store.items() if now > v["expires_at"]]
+        for k in expired_sessions:
+            del _session_store[k]
