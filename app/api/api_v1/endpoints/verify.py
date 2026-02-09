@@ -5,8 +5,13 @@ from app.services.student_service import StudentService
 from app.services.verify_service import VerifyService
 from app.schemas.dtos import ChallengeResponseDTO
 from app.schemas.result import Result
+from app.core.config import settings
 
 router = APIRouter()
+
+@router.get("/notice", response_model=Result[str])
+def get_notice():
+    return Result.success(data=settings.NOTICE)
 
 @router.get("/challenge", response_model=Result[ChallengeResponseDTO])
 def get_challenge(sid: str = Query(..., max_length=20), db: Session = Depends(get_db)):

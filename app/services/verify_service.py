@@ -24,7 +24,7 @@ class VerifyService:
         # 只从最新学期的课程中出题
         if courses:
             latest_term = max(c.cTerm for c in courses)
-            latest_courses = [c for c in courses if c.cTerm == latest_term]
+            latest_courses = [c for c in courses if c.cTerm == latest_term and c.score is not None]
         else:
             latest_courses = []
 

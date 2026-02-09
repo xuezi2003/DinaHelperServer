@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "DinaHelper"
     API_V1_STR: str = "/kldj"
     PORT: int = 3099
+    NOTICE: str = "数据仅供参考，请以教务系统为准。查询前需回答一门课程成绩以验证身份，通过后24小时内免验证"
     
     # Database
     DB_USER: str
