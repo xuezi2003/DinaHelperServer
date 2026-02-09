@@ -53,7 +53,7 @@ class VerifyService:
         }
 
     @staticmethod
-    def verify_and_consume(token: str, sid: str, answers: List[dict]) -> bool:
+    def verify_and_consume(token: str, sid: str, answers: List[dict]):
         challenge = _challenge_store.get(token)
         if not challenge:
             return False
@@ -68,7 +68,12 @@ class VerifyService:
 
         if challenge["verified"]:
             _challenge_store.pop(token, None)
-            return True
+            session_token = str(uuid.uuid4())
+            _session_store[session_token] = {
+                "sid": sid,
+                "expires_at": time.time() + SESSION_TTL
+            }
+            return session_token
 
         for q in challenge["questions"]:
             match = next((a for a in answers if a["courseName"] == q["courseName"]), None)
