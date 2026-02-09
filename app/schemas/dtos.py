@@ -38,3 +38,16 @@ class MajorRankingResponseDTO(BaseModel):
     total: int
     currentRank: int
     list: List[MajorRankItemDTO] = []
+
+class ChallengeResponseDTO(BaseModel):
+    token: str
+    questions: List[str] = []
+
+class VerifyAnswerItem(BaseModel):
+    courseName: str
+    score: float
+
+class VerifiedQueryDTO(BaseModel):
+    sid: str
+    token: str
+    answers: List[VerifyAnswerItem] = []

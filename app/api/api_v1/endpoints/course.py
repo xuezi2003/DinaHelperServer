@@ -4,15 +4,19 @@ from typing import List
 from app.db.session import get_db
 from app.services.student_service import StudentService
 from app.services.course_score_service import CourseScoreService
+from app.services.verify_service import VerifyService
 from app.schemas.schemas import ScoreQueryDTO, CourseScoreBase
-from app.schemas.dtos import CourseInfoFilterDTO, FailRateStatisDTO
+from app.schemas.dtos import CourseInfoFilterDTO, FailRateStatisDTO, VerifiedQueryDTO
 from app.schemas.result import Result
 
 router = APIRouter()
 
-@router.get("/query/id", response_model=Result[ScoreQueryDTO])
-def get_score_by_id(sid: str = Query(..., max_length=20), db: Session = Depends(get_db)):
-    student = StudentService.get_student_by_id(db, sid)
+@router.post("/query/id", response_model=Result[ScoreQueryDTO])
+def get_score_by_id(body: VerifiedQueryDTO, db: Session = Depends(get_db)):
+    if not VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers]):
+        return Result.error(message="验证失败，请确认成绩是否正确", code=403)
+
+    student = StudentService.get_student_by_id(db, body.sid)
     if not student:
         return Result.error(message="查无此人")
     
