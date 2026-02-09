@@ -8,6 +8,8 @@ from app.db.redis import get_redis
 
 CHALLENGE_TTL = 300  # 5 minutes
 SESSION_TTL = 86400  # 24 hours
+FAIL_LIMIT = 5
+FAIL_COOLDOWN = 300  # 5 minutes
 
 
 class VerifyService:
@@ -45,31 +47,60 @@ class VerifyService:
         }
 
     @staticmethod
-    def verify_and_consume(token: str, sid: str, answers: List[dict]):
+    def _incr_fail(r, client_ip: str):
+        key = f"verify_fail:{client_ip}"
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, FAIL_COOLDOWN)
+
+    @staticmethod
+    def is_rate_limited(client_ip: str) -> bool:
         r = get_redis()
+        count = r.get(f"verify_fail:{client_ip}")
+        return count is not None and int(count) >= FAIL_LIMIT
+
+    @staticmethod
+    def verify_and_consume(token: str, sid: str, answers: List[dict], client_ip: str = ""):
+        r = get_redis()
+
+        if client_ip:
+            count = r.get(f"verify_fail:{client_ip}")
+            if count is not None and int(count) >= FAIL_LIMIT:
+                return "cooldown"
+
         raw = r.get(f"challenge:{token}")
         if not raw:
+            if client_ip:
+                VerifyService._incr_fail(r, client_ip)
             return False
 
         challenge = json.loads(raw)
 
         if challenge["sid"] != sid:
             r.delete(f"challenge:{token}")
+            if client_ip:
+                VerifyService._incr_fail(r, client_ip)
             return False
 
         if challenge["verified"]:
             r.delete(f"challenge:{token}")
             session_token = str(uuid.uuid4())
             r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
+            if client_ip:
+                r.delete(f"verify_fail:{client_ip}")
             return session_token
 
         for q in challenge["questions"]:
             match = next((a for a in answers if a["courseName"] == q["courseName"]), None)
             if not match:
                 r.delete(f"challenge:{token}")
+                if client_ip:
+                    VerifyService._incr_fail(r, client_ip)
                 return False
             if int(float(match["score"])) != int(q["score"]):
                 r.delete(f"challenge:{token}")
+                if client_ip:
+                    VerifyService._incr_fail(r, client_ip)
                 return False
 
         r.delete(f"challenge:{token}")
@@ -77,6 +108,8 @@ class VerifyService:
         # 验证成功，生成 sessionToken
         session_token = str(uuid.uuid4())
         r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
+        if client_ip:
+            r.delete(f"verify_fail:{client_ip}")
         return session_token
 
     @staticmethod
