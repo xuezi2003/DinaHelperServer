@@ -17,7 +17,14 @@ class VerifyService:
         courses = CourseScoreRepository.get_by_student_id(db, sid)
         token = str(uuid.uuid4())
 
-        if len(courses) < 2:
+        # 只从最新学期的课程中出题
+        if courses:
+            latest_term = max(c.cTerm for c in courses)
+            latest_courses = [c for c in courses if c.cTerm == latest_term]
+        else:
+            latest_courses = []
+
+        if len(latest_courses) < 2:
             _challenge_store[token] = {
                 "sid": sid,
                 "questions": [],
@@ -26,7 +33,7 @@ class VerifyService:
             }
             return {"token": token, "questions": []}
 
-        selected = random.sample(courses, 2)
+        selected = random.sample(latest_courses, 2)
         _challenge_store[token] = {
             "sid": sid,
             "questions": [{"courseName": c.courseName, "score": c.score} for c in selected],
