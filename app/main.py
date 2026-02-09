@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.api_v1.api import api_router
 from app.core.config import settings
 import logging
@@ -13,6 +15,26 @@ app = FastAPI(
     docs_url=None,
     redoc_url=None,
 )
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    messages = {
+        404: "接口不存在",
+        405: "请升级小程序（重新进入）",
+        422: "参数格式错误",
+    }
+    msg = messages.get(exc.status_code, exc.detail or "请求错误")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.status_code, "message": msg, "data": None}
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={"code": 422, "message": "请求参数格式错误", "data": None}
+    )
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
