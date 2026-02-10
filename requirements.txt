@@ -9,3 +9,4 @@ alembic==1.18.3
 pydantic[email]==2.12.5
 python-multipart==0.0.22
 redis==5.2.1
+httpx==0.28.1

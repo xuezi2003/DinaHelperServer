@@ -5,6 +5,7 @@ from app.db.session import get_db
 from app.services.student_service import StudentService
 from app.services.course_score_service import CourseScoreService
 from app.services.verify_service import VerifyService
+from app.services.wx_service import WxService
 from app.schemas.schemas import ScoreQueryDTO, CourseScoreBase
 from app.schemas.dtos import CourseInfoFilterDTO, FailRateStatisDTO, VerifiedQueryDTO
 from app.schemas.result import Result
@@ -15,13 +16,14 @@ router = APIRouter()
 def get_score_by_id(body: VerifiedQueryDTO, request: Request, db: Session = Depends(get_db)):
     session_token = None
     client_ip = request.headers.get("CF-Connecting-IP") or request.client.host
+    openid = (WxService.validate_wx_token(body.wxToken) or "") if body.wxToken else ""
 
     if body.sessionToken:
         if not VerifyService.validate_session(body.sessionToken, body.sid):
             return Result.error(message="会话已过期，请重新验证", code=403)
         session_token = body.sessionToken
     else:
-        result = VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers], client_ip)
+        result = VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers], client_ip, openid)
         if not result:
             return Result.error(message="验证失败，请确认成绩是否正确", code=403)
         session_token = result

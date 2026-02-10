@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = ""
     REDIS_DB: int = 0
 
+    # WeChat
+    WX_APP_ID: str = ""
+    WX_APP_SECRET: str = ""
+
     @property
     def DATABASE_URL(self) -> str:
         return f"mysql+mysqlconnector://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"

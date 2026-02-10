@@ -52,3 +52,4 @@ class VerifiedQueryDTO(BaseModel):
     token: str = ''
     answers: List[VerifyAnswerItem] = []
     sessionToken: str = ''
+    wxToken: str = ''
