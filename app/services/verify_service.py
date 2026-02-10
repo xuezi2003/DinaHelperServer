@@ -14,9 +14,10 @@ CHALLENGE_TTL = 300  # 5 minutes
 SESSION_TTL = 86400  # 24 hours
 FAIL_LIMIT = 5
 FAIL_BASE_COOLDOWN = 300  # 5 minutes base
+FAIL_COUNT_TTL = 86400  # 24 hours (cleanup, not window)
 CHALLENGE_RATE_LIMIT = settings.CHALLENGE_RATE_LIMIT
 CHALLENGE_RATE_WINDOW = 300  # 5 minutes
-BAN_COUNT_TTL = 3600  # 1 hour
+BAN_COUNT_TTL = 172800  # 48 hours
 
 
 class VerifyService:
@@ -30,12 +31,11 @@ class VerifyService:
         rid = VerifyService._rate_id(openid, client_ip)
 
         if rid:
-            fail_key = f"verify_fail:{rid}"
-            count = r.get(fail_key)
-            if count is not None and int(count) >= FAIL_LIMIT:
-                ttl = r.ttl(fail_key)
-                logger.warning(f"Rate limited (fail): rid={rid} sid={sid} fails={count} ttl={ttl}")
-                return {"cooldown": True, "ttl": max(ttl, 0)}
+            ban_key = f"ban_active:{rid}"
+            ban_ttl = r.ttl(ban_key)
+            if ban_ttl and ban_ttl > 0:
+                logger.warning(f"Rate limited (ban): rid={rid} sid={sid} ttl={ban_ttl}")
+                return {"cooldown": True, "ttl": ban_ttl}
 
             rate_key = f"challenge_rate:{rid}"
             rate = r.incr(rate_key)
@@ -81,14 +81,14 @@ class VerifyService:
     def _incr_fail(r, rid: str):
         key = f"verify_fail:{rid}"
         count = r.incr(key)
-        if count == 1:
-            r.expire(key, FAIL_BASE_COOLDOWN)
+        r.expire(key, FAIL_COUNT_TTL)
         if int(count) >= FAIL_LIMIT:
-            ban_key = f"ban_count:{rid}"
-            ban_count = r.incr(ban_key)
+            ban_count_key = f"ban_count:{rid}"
+            ban_count = r.incr(ban_count_key)
             cooldown = FAIL_BASE_COOLDOWN * (2 ** (int(ban_count) - 1))
-            r.expire(ban_key, max(BAN_COUNT_TTL, cooldown))
-            r.expire(key, cooldown)
+            r.expire(ban_count_key, max(BAN_COUNT_TTL, cooldown))
+            r.set(f"ban_active:{rid}", 1, ex=cooldown)
+            r.delete(key)
             logger.warning(f"Ban escalated: rid={rid} ban_count={ban_count} cooldown={cooldown}s")
 
     @staticmethod
@@ -103,8 +103,7 @@ class VerifyService:
         rid = challenge.get("rid") or VerifyService._rate_id(openid, client_ip)
 
         if rid:
-            fail_count = r.get(f"verify_fail:{rid}")
-            if fail_count is not None and int(fail_count) >= FAIL_LIMIT:
+            if r.exists(f"ban_active:{rid}"):
                 r.delete(f"challenge:{token}")
                 logger.warning(f"Verify rejected (banned): rid={rid} sid={sid}")
                 return False
@@ -138,7 +137,10 @@ class VerifyService:
 
         r.delete(f"challenge:{token}")
 
-        # 验证成功，生成 sessionToken
+        # 验证成功，清除失败计数和封禁记录
+        if rid:
+            r.delete(f"verify_fail:{rid}")
+            r.delete(f"ban_count:{rid}")
         session_token = str(uuid.uuid4())
         r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
         logger.info(f"Verify success: sid={sid} rid={rid}")
