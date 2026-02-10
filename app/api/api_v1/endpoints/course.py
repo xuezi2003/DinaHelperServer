@@ -12,6 +12,13 @@ from app.schemas.result import Result
 
 router = APIRouter()
 
+
+def _check_wx(wx_token: str) -> bool:
+    if not wx_token:
+        return False
+    return WxService.validate_wx_token(wx_token) is not None
+
+
 @router.post("/query/id")
 def get_score_by_id(body: VerifiedQueryDTO, request: Request, db: Session = Depends(get_db)):
     session_token = None
@@ -43,14 +50,18 @@ def get_score_by_id(body: VerifiedQueryDTO, request: Request, db: Session = Depe
     return Result.success(data={"sessionToken": session_token, "queryData": query_dto.model_dump()})
 
 @router.get("/name", response_model=Result[List[str]])
-def get_course_name(cname: str = Query(..., alias="cname", max_length=50), db: Session = Depends(get_db)):
+def get_course_name(cname: str = Query(..., alias="cname", max_length=50), wxToken: str = "", db: Session = Depends(get_db)):
+    if not _check_wx(wxToken):
+        return Result.error(message="请通过微信小程序访问", code=401)
     names = CourseScoreService.get_course_names(db, cname)
     if not names:
         return Result.error(message="没有匹配课程")
     return Result.success(data=names)
 
 @router.get("/filter", response_model=Result[CourseInfoFilterDTO])
-def get_course_info_filter_by_name(courseName: str = Query(..., max_length=50), db: Session = Depends(get_db)):
+def get_course_info_filter_by_name(courseName: str = Query(..., max_length=50), wxToken: str = "", db: Session = Depends(get_db)):
+    if not _check_wx(wxToken):
+        return Result.error(message="请通过微信小程序访问", code=401)
     current_filter = CourseInfoFilterDTO(courseName=courseName)
     options = CourseScoreService.get_dynamic_filter_options(db, current_filter)
     if not options.terms:
@@ -59,10 +70,14 @@ def get_course_info_filter_by_name(courseName: str = Query(..., max_length=50), 
 
 @router.post("/filter/dynamic", response_model=Result[CourseInfoFilterDTO])
 def get_dynamic_filter_options(currentFilter: CourseInfoFilterDTO = Body(...), db: Session = Depends(get_db)):
+    if not _check_wx(currentFilter.wxToken):
+        return Result.error(message="请通过微信小程序访问", code=401)
     options = CourseScoreService.get_dynamic_filter_options(db, currentFilter)
     return Result.success(data=options)
 
 @router.post("/fail-rate", response_model=Result[FailRateStatisDTO])
 def get_fail_rate_statis(filter: CourseInfoFilterDTO = Body(...), db: Session = Depends(get_db)):
+    if not _check_wx(filter.wxToken):
+        return Result.error(message="请通过微信小程序访问", code=401)
     stats = CourseScoreService.get_fail_rate_statistics(db, filter)
     return Result.success(data=stats)

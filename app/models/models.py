@@ -18,6 +18,25 @@ class Student(Base):
     majorAvgRank = Column("major_avg_rank", Integer)
     majorGpaRank = Column("major_gpa_rank", Integer)
 
+class Recommendation(Base):
+    __tablename__ = "recommendation"
+
+    studentId = Column("s_id", String(14), primary_key=True)
+    year = Column("year", Integer, primary_key=True)
+    name = Column("name", String(20))
+    gender = Column("gender", String(2))
+    political = Column("political", String(20))
+    college = Column("college", String(60))
+    major = Column("major", String(60))
+    courseGpa = Column("course_gpa", Float)
+    courseAvg = Column("course_avg", Float, nullable=True)
+    perfScore = Column("perf_score", Float, nullable=True)
+    compScore = Column("comp_score", Float)
+    compRank = Column("comp_rank", Integer)
+    majorTotal = Column("major_total", Integer, nullable=True)
+    remark = Column("remark", String(100))
+
+
 class CourseScore(Base):
     __tablename__ = "course_score"
 

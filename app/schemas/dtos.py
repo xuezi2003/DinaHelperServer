@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict
 
 class CourseInfoFilterDTO(BaseModel):
@@ -7,6 +7,7 @@ class CourseInfoFilterDTO(BaseModel):
     colleges: List[str] = []
     majors: List[str] = []
     classes: List[str] = []
+    wxToken: str = Field(default='', exclude=True)
     
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -40,6 +41,38 @@ class MajorRankingResponseDTO(BaseModel):
     grade: str = ''
     major: str = ''
     list: List[MajorRankItemDTO] = []
+
+class RecFilterDTO(BaseModel):
+    year: int
+    college: Optional[str] = None
+    major: Optional[str] = None
+    wxToken: str = ''
+
+class RecOptionsDTO(BaseModel):
+    years: List[int] = []
+    colleges: List[str] = []
+    majors: List[str] = []
+
+class RecItemDTO(BaseModel):
+    college: Optional[str] = None
+    major: Optional[str] = None
+    recGpa: Optional[float] = None
+    latestGpa: Optional[float] = None
+    perfScore: Optional[float] = None
+    compScore: Optional[float] = None
+    compRank: Optional[int] = None
+    latestGpaRank: Optional[int] = None
+    remark: str = ''
+
+class RecSummaryDTO(BaseModel):
+    recommended: int = 0
+    majorTotal: Optional[int] = None
+    rate: Optional[str] = None
+
+class RecListResponseDTO(BaseModel):
+    summary: RecSummaryDTO
+    list: List[RecItemDTO] = []
+
 
 class ChallengeResponseDTO(BaseModel):
     token: str

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Rate Limiting
     CHALLENGE_RATE_LIMIT: int = 10
 
+    # Recommendation
+    RECOMMENDATION_NOTICE: str = "数据来源：历年推免公示名单+成绩库。「推免时」为公示时数据，「最新」为成绩库最新数据。2024年无表现成绩和专业人数。本页不展示任何个人身份信息。"
+
     # WeChat
     WX_APP_ID: str = ""
     WX_APP_SECRET: str = ""
