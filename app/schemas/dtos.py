@@ -48,7 +48,7 @@ class RecFilterDTO(BaseModel):
     major: Optional[str] = None
     page: int = 1
     pageSize: int = 20
-    wxToken: str = ''
+    wxToken: str = Field(default='', exclude=True)
 
 class RecOptionsDTO(BaseModel):
     years: List[int] = []

@@ -4,10 +4,14 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
 from app.models.models import Recommendation, Student
 from app.utils.class_utils import get_major_code
+from app.db.redis import cache_get, cache_set, make_hash_key
 from app.schemas.dtos import (
     RecFilterDTO, RecOptionsDTO, RecItemDTO,
     RecSummaryDTO, RecListResponseDTO,
 )
+
+REC_OPTIONS_TTL = 21600  # 6h
+REC_LIST_TTL = 21600     # 6h
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +19,11 @@ logger = logging.getLogger(__name__)
 class RecommendationService:
     @staticmethod
     def get_options(db: Session, year: Optional[int], college: Optional[str]) -> RecOptionsDTO:
+        key = make_hash_key("rec_opts", year=year, college=college)
+        cached = cache_get(key)
+        if cached is not None:
+            return RecOptionsDTO(**cached)
+
         years = [r[0] for r in db.query(distinct(Recommendation.year)).order_by(Recommendation.year.desc()).all()]
 
         q = db.query(distinct(Recommendation.college)).order_by(Recommendation.college)
@@ -29,10 +38,19 @@ class RecommendationService:
             q = q.filter(Recommendation.college == college)
         majors = [r[0] for r in q.all()]
 
-        return RecOptionsDTO(years=years, colleges=colleges, majors=majors)
+        result = RecOptionsDTO(years=years, colleges=colleges, majors=majors)
+        cache_set(key, result.model_dump(), REC_OPTIONS_TTL)
+        return result
 
     @staticmethod
     def query_list(db: Session, f: RecFilterDTO) -> RecListResponseDTO:
+        key = make_hash_key("rec_list",
+            year=f.year, college=f.college, major=f.major,
+            page=f.page, pageSize=f.pageSize)
+        cached = cache_get(key)
+        if cached is not None:
+            return RecListResponseDTO(**cached)
+
         q = db.query(Recommendation).filter(Recommendation.year == f.year)
         if f.college:
             q = q.filter(Recommendation.college == f.college)
@@ -41,10 +59,12 @@ class RecommendationService:
 
         total = q.count()
         if total == 0:
-            return RecListResponseDTO(
+            empty = RecListResponseDTO(
                 summary=RecSummaryDTO(recommended=0),
                 list=[], total=0, page=f.page, pageSize=f.pageSize,
             )
+            cache_set(key, empty.model_dump(), REC_LIST_TTL)
+            return empty
 
         if f.major:
             q = q.order_by(Recommendation.compRank)
@@ -86,7 +106,7 @@ class RecommendationService:
         if major_total is not None and major_total > 0:
             rate = f"{(total / major_total * 100):.1f}%"
 
-        return RecListResponseDTO(
+        result = RecListResponseDTO(
             summary=RecSummaryDTO(
                 recommended=total,
                 majorTotal=major_total,
@@ -97,6 +117,8 @@ class RecommendationService:
             page=f.page,
             pageSize=f.pageSize,
         )
+        cache_set(key, result.model_dump(), REC_LIST_TTL)
+        return result
 
     @staticmethod
     def _calc_major_total(db: Session, f: RecFilterDTO, recs: List[Recommendation],
