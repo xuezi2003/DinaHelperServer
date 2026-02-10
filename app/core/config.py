@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = ""
     REDIS_DB: int = 0
 
+    # Rate Limiting
+    CHALLENGE_RATE_LIMIT: int = 10
+
     # WeChat
     WX_APP_ID: str = ""
     WX_APP_SECRET: str = ""

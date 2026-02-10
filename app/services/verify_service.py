@@ -6,6 +6,7 @@ from typing import List
 from sqlalchemy.orm import Session
 from app.services.repositories import CourseScoreRepository
 from app.db.redis import get_redis
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,7 @@ CHALLENGE_TTL = 300  # 5 minutes
 SESSION_TTL = 86400  # 24 hours
 FAIL_LIMIT = 5
 FAIL_BASE_COOLDOWN = 300  # 5 minutes base
-CHALLENGE_RATE_LIMIT = 20  # max challenges per window
+CHALLENGE_RATE_LIMIT = settings.CHALLENGE_RATE_LIMIT
 CHALLENGE_RATE_WINDOW = 300  # 5 minutes
 BAN_COUNT_TTL = 3600  # 1 hour
 
