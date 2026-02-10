@@ -37,6 +37,8 @@ class MajorRankItemDTO(BaseModel):
 class MajorRankingResponseDTO(BaseModel):
     total: int
     currentRank: int
+    grade: str = ''
+    major: str = ''
     list: List[MajorRankItemDTO] = []
 
 class ChallengeResponseDTO(BaseModel):

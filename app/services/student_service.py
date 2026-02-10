@@ -70,5 +70,7 @@ class StudentService:
         return MajorRankingResponseDTO(
             total=len(students),
             currentRank=current_rank,
+            grade=student.sGrade or '',
+            major=student.sMajor or '',
             list=ranking_list
         )
