@@ -57,6 +57,7 @@ class VerifyService:
         if len(latest_courses) < 1:
             r.set(f"challenge:{token}", json.dumps({
                 "sid": sid,
+                "rid": rid,
                 "questions": [],
                 "verified": True
             }), ex=CHALLENGE_TTL)
@@ -65,6 +66,7 @@ class VerifyService:
         selected = random.sample(latest_courses, 1)
         r.set(f"challenge:{token}", json.dumps({
             "sid": sid,
+            "rid": rid,
             "questions": [{"courseName": c.courseName, "score": c.score} for c in selected],
             "verified": False
         }), ex=CHALLENGE_TTL)
@@ -91,13 +93,13 @@ class VerifyService:
     @staticmethod
     def verify_and_consume(token: str, sid: str, answers: List[dict], client_ip: str = "", openid: str = ""):
         r = get_redis()
-        rid = VerifyService._rate_id(openid, client_ip)
         raw = r.get(f"challenge:{token}")
         if not raw:
-            logger.info(f"Verify failed: token not found, sid={sid} rid={rid}")
+            logger.info(f"Verify failed: token not found, sid={sid}")
             return False
 
         challenge = json.loads(raw)
+        rid = challenge.get("rid") or VerifyService._rate_id(openid, client_ip)
 
         if challenge["sid"] != sid:
             r.delete(f"challenge:{token}")
