@@ -101,6 +101,13 @@ class VerifyService:
         challenge = json.loads(raw)
         rid = challenge.get("rid") or VerifyService._rate_id(openid, client_ip)
 
+        if rid:
+            fail_count = r.get(f"verify_fail:{rid}")
+            if fail_count is not None and int(fail_count) >= FAIL_LIMIT:
+                r.delete(f"challenge:{token}")
+                logger.warning(f"Verify rejected (banned): rid={rid} sid={sid}")
+                return False
+
         if challenge["sid"] != sid:
             r.delete(f"challenge:{token}")
             logger.warning(f"Verify failed: sid mismatch, expected={challenge['sid']} got={sid} rid={rid}")
