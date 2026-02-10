@@ -44,5 +44,7 @@ def get_rec_list(
         return Result.error(message="请通过微信小程序访问", code=401)
     if not f.year:
         return Result.error(message="请选择年份", code=400)
+    f.page = max(1, f.page)
+    f.pageSize = max(1, f.pageSize)
     data = RecommendationService.query_list(db, f)
     return Result.success(data=data)

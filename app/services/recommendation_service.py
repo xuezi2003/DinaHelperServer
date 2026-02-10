@@ -39,17 +39,21 @@ class RecommendationService:
         if f.major:
             q = q.filter(Recommendation.major == f.major)
 
-        if f.major:
-            recs: List[Recommendation] = q.order_by(Recommendation.compRank).all()
-        else:
-            recs: List[Recommendation] = q.order_by(
-                Recommendation.college, Recommendation.major, Recommendation.compRank
-            ).all()
-        if not recs:
+        total = q.count()
+        if total == 0:
             return RecListResponseDTO(
                 summary=RecSummaryDTO(recommended=0),
-                list=[]
+                list=[], total=0, page=f.page, pageSize=f.pageSize,
             )
+
+        if f.major:
+            q = q.order_by(Recommendation.compRank)
+        else:
+            q = q.order_by(Recommendation.college, Recommendation.major, Recommendation.compRank)
+
+        # Paginate
+        offset = (f.page - 1) * f.pageSize
+        recs: List[Recommendation] = q.offset(offset).limit(f.pageSize).all()
 
         # Batch fetch student info for GPA and rank
         sids = [r.studentId for r in recs]
@@ -76,20 +80,22 @@ class RecommendationService:
                 remark=r.remark or '',
             ))
 
-        # Summary
-        recommended = len(recs)
+        # Summary (based on total, not page)
         major_total = RecommendationService._calc_major_total(db, f, recs, stu_map)
         rate = None
         if major_total is not None and major_total > 0:
-            rate = f"{(recommended / major_total * 100):.1f}%"
+            rate = f"{(total / major_total * 100):.1f}%"
 
         return RecListResponseDTO(
             summary=RecSummaryDTO(
-                recommended=recommended,
+                recommended=total,
                 majorTotal=major_total,
                 rate=rate,
             ),
             list=items,
+            total=total,
+            page=f.page,
+            pageSize=f.pageSize,
         )
 
     @staticmethod

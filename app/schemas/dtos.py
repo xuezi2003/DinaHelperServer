@@ -46,6 +46,8 @@ class RecFilterDTO(BaseModel):
     year: int
     college: Optional[str] = None
     major: Optional[str] = None
+    page: int = 1
+    pageSize: int = 20
     wxToken: str = ''
 
 class RecOptionsDTO(BaseModel):
@@ -72,6 +74,9 @@ class RecSummaryDTO(BaseModel):
 class RecListResponseDTO(BaseModel):
     summary: RecSummaryDTO
     list: List[RecItemDTO] = []
+    total: int = 0
+    page: int = 1
+    pageSize: int = 20
 
 
 class ChallengeResponseDTO(BaseModel):
