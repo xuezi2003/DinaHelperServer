@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, Text, DateTime
+from sqlalchemy.sql import func
 from app.db.session import Base
 
 class Student(Base):
@@ -51,3 +52,9 @@ class CourseScore(Base):
     cPass = Column("c_pass", Integer)  # 0-正常 1-补考 2-重修 3-刷分
 
 
+class Notice(Base):
+    __tablename__ = "notice"
+
+    key = Column("notice_key", String(50), primary_key=True)
+    content = Column("content", Text, nullable=False, default="")
+    updatedAt = Column("updated_at", DateTime, server_default=func.now(), onupdate=func.now())

@@ -1,4 +1,3 @@
-import logging
 from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
@@ -10,10 +9,8 @@ from app.schemas.dtos import (
     RecSummaryDTO, RecListResponseDTO,
 )
 
-REC_OPTIONS_TTL = 21600  # 6h
-REC_LIST_TTL = 21600     # 6h
-
-logger = logging.getLogger(__name__)
+REC_OPTIONS_TTL = 21600  # 6小时
+REC_LIST_TTL = 21600     # 6小时
 
 
 class RecommendationService:
@@ -71,11 +68,11 @@ class RecommendationService:
         else:
             q = q.order_by(Recommendation.college, Recommendation.major, Recommendation.compRank)
 
-        # Paginate
+        # 分页
         offset = (f.page - 1) * f.pageSize
         recs: List[Recommendation] = q.offset(offset).limit(f.pageSize).all()
 
-        # Batch fetch student info for GPA and rank
+        # 批量获取学生信息（绩点和排名）
         sids = [r.studentId for r in recs]
         stu_map: Dict[str, Student] = {}
         for i in range(0, len(sids), 500):
@@ -84,7 +81,7 @@ class RecommendationService:
             for s in students:
                 stu_map[s.studentId] = s
 
-        # Build items
+        # 构建列表项
         items: List[RecItemDTO] = []
         for r in recs:
             stu = stu_map.get(r.studentId)
@@ -100,7 +97,7 @@ class RecommendationService:
                 remark=r.remark or '',
             ))
 
-        # Summary (based on total, not page)
+        # 汇总统计（基于总数，非当前页）
         major_total = RecommendationService._calc_major_total(db, f, recs, stu_map)
         rate = None
         if major_total is not None and major_total > 0:
@@ -123,14 +120,14 @@ class RecommendationService:
     @staticmethod
     def _calc_major_total(db: Session, f: RecFilterDTO, recs: List[Recommendation],
                           stu_map: Dict[str, Student]) -> Optional[int]:
-        """Calculate total students for the filter condition.
-        Uses s_class prefix (major_code) to identify majors, consistent with project convention."""
-        # If major is specified and major_total is available, use it directly
+        """计算筛选条件下的专业总人数。
+        通过 s_class 前缀（专业代码）识别专业，与项目约定一致。"""
+        # 指定了专业且 major_total 可用时，直接使用
         if f.major:
             mt = recs[0].majorTotal if recs and recs[0].majorTotal is not None else None
             if mt is not None:
                 return mt
-            # Fallback: find major_code from stu_map, then count by s_class prefix
+            # 回退：从学生信息中提取专业代码，按 s_class 前缀统计
             major_code = None
             for r in recs:
                 stu = stu_map.get(r.studentId)
@@ -144,7 +141,7 @@ class RecommendationService:
                 return count if count else None
             return None
 
-        # If only college or only year: count from student table by grade
+        # 仅选了学院或年份时：按年级从 student 表统计
         grade = None
         for stu in stu_map.values():
             if stu.sGrade:

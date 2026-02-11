@@ -36,7 +36,7 @@ def _course_to_dict(c: CourseScore) -> dict:
 
 class StudentRepository:
     @staticmethod
-    def get_by_id(db: Session, student_id: str) -> Optional[Student]:
+    def get_by_id(db: Session, student_id: str) -> Optional[Any]:
         key = f"student:{student_id}"
         cached = cache_get(key)
         if cached is not None:
@@ -48,9 +48,7 @@ class StudentRepository:
 
     @staticmethod
     def get_ranking(db: Session, student_id: str, scope: str = 'class') -> Dict[str, int]:
-        """
-        Retrieves pre-calculated rank and total count from the database.
-        """
+        """从数据库获取预计算的排名和总人数。"""
         key = f"rank:{student_id}:{scope}"
         cached = cache_get(key)
         if cached is not None:
@@ -87,11 +85,9 @@ class StudentRepository:
         return db.query(Student).filter(Student.sName == name).order_by(Student.studentId).all()
     
     @staticmethod
-    def get_major_ranking(db: Session, major_code: str, sort_by: str = 'gpa', order: str = 'desc') -> List[Student]:
-        """
-        Get all students in a major sorted by GPA or AVG.
-        major_code is the first 8 characters of s_class.
-        """
+    def get_major_ranking(db: Session, major_code: str, sort_by: str = 'gpa', order: str = 'desc') -> List[Any]:
+        """获取专业内所有学生，按绩点或均分排序。
+        major_code 为 s_class 前 8 位。"""
         key = f"major_ranking:{major_code}:{sort_by}:{order}"
         cached = cache_get(key)
         if cached is not None:
@@ -112,9 +108,10 @@ class StudentRepository:
         students = query.all()
         cache_set(key, [_student_to_dict(s) for s in students], MAJOR_RANKING_TTL)
         return students
+
 class CourseScoreRepository:
     @staticmethod
-    def get_by_student_id(db: Session, student_id: str) -> List[CourseScore]:
+    def get_by_student_id(db: Session, student_id: str) -> List[Any]:
         key = f"scores:{student_id}"
         cached = cache_get(key)
         if cached is not None:
@@ -190,10 +187,8 @@ class CourseScoreRepository:
 
     @staticmethod
     def get_available_options(db: Session, filter_dto: CourseInfoFilterDTO, field: str) -> List[str]:
-        """
-        Get available filter options dynamically.
-        field should be one of: 'c_term', 's_college', 's_major', 's_class'
-        """
+        """动态获取可用的筛选选项。
+        field 可选值: 'c_term', 's_college', 's_major', 's_class'。"""
         key = make_hash_key(f"filter_opts:{field}",
             courseName=filter_dto.courseName, terms=filter_dto.terms,
             colleges=filter_dto.colleges, majors=filter_dto.majors, classes=filter_dto.classes)

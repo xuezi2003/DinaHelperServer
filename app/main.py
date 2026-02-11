@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,20 +16,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # startup
+    try:
+        get_redis().flushdb()
+        logger.info("启动时已清空 Redis 缓存")
+    except Exception as e:
+        logger.warning(f"启动时清空 Redis 失败: {e}")
+    yield
+    # shutdown（如需清理可在此添加）
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=None,
     docs_url=None,
     redoc_url=None,
+    lifespan=lifespan,
 )
-
-@app.on_event("startup")
-def flush_redis_cache():
-    try:
-        get_redis().flushdb()
-        logger.info("Redis cache flushed on startup")
-    except Exception as e:
-        logger.warning(f"Failed to flush Redis on startup: {e}")
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
@@ -52,13 +59,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    logger.error(f"未处理异常: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={"code": 500, "message": "服务器内部错误", "data": None}
     )
 
-# Set all CORS enabled origins
+# 设置 CORS 允许所有来源
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

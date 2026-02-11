@@ -10,14 +10,14 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-CHALLENGE_TTL = 300  # 5 minutes
-SESSION_TTL = 86400  # 24 hours
+CHALLENGE_TTL = 300  # 5分钟
+SESSION_TTL = 86400  # 24小时
 FAIL_LIMIT = 5
-FAIL_BASE_COOLDOWN = 300  # 5 minutes base
-FAIL_COUNT_TTL = 86400  # 24 hours (cleanup, not window)
+FAIL_BASE_COOLDOWN = 300  # 5分钟基础冷却
+FAIL_COUNT_TTL = 86400  # 24小时（自动清理，非窗口）
 CHALLENGE_RATE_LIMIT = settings.CHALLENGE_RATE_LIMIT
-CHALLENGE_RATE_WINDOW = 300  # 5 minutes
-BAN_COUNT_TTL = 172800  # 48 hours
+CHALLENGE_RATE_WINDOW = 300  # 5分钟
+BAN_COUNT_TTL = 172800  # 48小时
 
 
 class VerifyService:
@@ -34,7 +34,7 @@ class VerifyService:
             ban_key = f"ban_active:{rid}"
             ban_ttl = r.ttl(ban_key)
             if ban_ttl and ban_ttl > 0:
-                logger.warning(f"Rate limited (ban): rid={rid} sid={sid} ttl={ban_ttl}")
+                logger.warning(f"频率限制(封禁): rid={rid} sid={sid} ttl={ban_ttl}")
                 return {"cooldown": True, "ttl": ban_ttl}
 
             rate_key = f"challenge_rate:{rid}"
@@ -42,7 +42,7 @@ class VerifyService:
             if rate == 1:
                 r.expire(rate_key, CHALLENGE_RATE_WINDOW)
             if rate > CHALLENGE_RATE_LIMIT:
-                logger.warning(f"Rate limited (freq): rid={rid} sid={sid} rate={rate}")
+                logger.warning(f"频率限制(频繁): rid={rid} sid={sid} rate={rate}")
                 return {"cooldown": True, "ttl": CHALLENGE_RATE_WINDOW}
 
         courses = CourseScoreRepository.get_by_student_id(db, sid)
@@ -89,14 +89,14 @@ class VerifyService:
             r.expire(ban_count_key, max(BAN_COUNT_TTL, cooldown))
             r.set(f"ban_active:{rid}", 1, ex=cooldown)
             r.delete(key)
-            logger.warning(f"Ban escalated: rid={rid} ban_count={ban_count} cooldown={cooldown}s")
+            logger.warning(f"封禁升级: rid={rid} ban_count={ban_count} cooldown={cooldown}s")
 
     @staticmethod
     def verify_and_consume(token: str, sid: str, answers: List[dict], client_ip: str = "", openid: str = ""):
         r = get_redis()
         raw = r.get(f"challenge:{token}")
         if not raw:
-            logger.info(f"Verify failed: token not found, sid={sid}")
+            logger.info(f"验证失败: token 不存在, sid={sid}")
             return False
 
         challenge = json.loads(raw)
@@ -105,19 +105,19 @@ class VerifyService:
         if rid:
             if r.exists(f"ban_active:{rid}"):
                 r.delete(f"challenge:{token}")
-                logger.warning(f"Verify rejected (banned): rid={rid} sid={sid}")
+                logger.warning(f"验证拒绝(已封禁): rid={rid} sid={sid}")
                 return False
 
         if challenge["sid"] != sid:
             r.delete(f"challenge:{token}")
-            logger.warning(f"Verify failed: sid mismatch, expected={challenge['sid']} got={sid} rid={rid}")
+            logger.warning(f"验证失败: sid 不匹配, 期望={challenge['sid']} 实际={sid} rid={rid}")
             return False
 
         if challenge["verified"]:
             r.delete(f"challenge:{token}")
             session_token = str(uuid.uuid4())
             r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
-            logger.info(f"Verify success (auto): sid={sid} rid={rid}")
+            logger.info(f"验证成功(自动): sid={sid} rid={rid}")
             return session_token
 
         for q in challenge["questions"]:
@@ -126,13 +126,13 @@ class VerifyService:
                 r.delete(f"challenge:{token}")
                 if rid:
                     VerifyService._incr_fail(r, rid)
-                logger.info(f"Verify failed: missing answer for '{q['courseName']}', sid={sid} rid={rid}")
+                logger.info(f"验证失败: 未答'{q['courseName']}', sid={sid} rid={rid}")
                 return False
             if int(float(match["score"])) != int(q["score"]):
                 r.delete(f"challenge:{token}")
                 if rid:
                     VerifyService._incr_fail(r, rid)
-                logger.info(f"Verify failed: wrong score for '{q['courseName']}', sid={sid} rid={rid}")
+                logger.info(f"验证失败: '{q['courseName']}'成绩错误, sid={sid} rid={rid}")
                 return False
 
         r.delete(f"challenge:{token}")
@@ -143,7 +143,7 @@ class VerifyService:
             r.delete(f"ban_count:{rid}")
         session_token = str(uuid.uuid4())
         r.set(f"session:{session_token}", sid, ex=SESSION_TTL)
-        logger.info(f"Verify success: sid={sid} rid={rid}")
+        logger.info(f"验证成功: sid={sid} rid={rid}")
         return session_token
 
     @staticmethod

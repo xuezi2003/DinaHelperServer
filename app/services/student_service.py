@@ -35,12 +35,10 @@ class StudentService:
         return [SameNameDTO(sId=s.studentId, sMajor=s.sMajor) for s in students]
 
     @staticmethod
-    def get_major_ranking_list(db: Session, student: 'Student', sort_by: str = 'gpa', order: str = 'desc'):
-        """
-        Get major ranking list for a student.
-        Major is determined by the first 8 characters of the student's class number.
-        Returns total count and the ranking list without student IDs.
-        """
+    def get_major_ranking_list(db: Session, student: 'Student', sort_by: str = 'gpa', order: str = 'desc',
+                               page: int = 1, page_size: int = 35):
+        """获取学生所在专业的排名列表（分页）。
+        专业由班级号前 8 位确定，返回总数、当前排名和分页数据。"""
         from app.schemas.dtos import MajorRankingResponseDTO
         
         major_code = get_major_code(student.sClass)
@@ -51,6 +49,7 @@ class StudentService:
         
         sort_key = (lambda s: s.sGpa or 0.0) if sort_by == 'gpa' else (lambda s: s.sAvg or 0.0)
         
+        # 计算全部排名（处理并列）
         ranking_list = []
         current_rank = 0
         prev_value = None
@@ -67,10 +66,18 @@ class StudentService:
             if s.studentId == student.studentId:
                 current_rank = rank
         
+        # 分页
+        total = len(ranking_list)
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_list = ranking_list[start:end]
+        
         return MajorRankingResponseDTO(
-            total=len(students),
+            total=total,
             currentRank=current_rank,
             grade=student.sGrade or '',
             major=student.sMajor or '',
-            list=ranking_list
+            list=page_list,
+            page=page,
+            pageSize=page_size,
         )

@@ -1,39 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from fastapi import APIRouter, Depends, Query, Body, Request
 from sqlalchemy.orm import Session
 from typing import List
 from app.db.session import get_db
 from app.services.student_service import StudentService
 from app.services.course_score_service import CourseScoreService
-from app.services.verify_service import VerifyService
-from app.services.wx_service import WxService
 from app.schemas.schemas import ScoreQueryDTO, CourseScoreBase
 from app.schemas.dtos import CourseInfoFilterDTO, FailRateStatisDTO, VerifiedQueryDTO
 from app.schemas.result import Result
+from app.api.deps import verify_request
+
 
 router = APIRouter()
 
 
-def _check_wx(wx_token: str) -> bool:
-    if not wx_token:
-        return False
-    return WxService.validate_wx_token(wx_token) is not None
-
-
 @router.post("/query/id")
 def get_score_by_id(body: VerifiedQueryDTO, request: Request, db: Session = Depends(get_db)):
-    session_token = None
-    client_ip = request.headers.get("CF-Connecting-IP") or request.client.host
-    openid = (WxService.validate_wx_token(body.wxToken) or "") if body.wxToken else ""
-
-    if body.sessionToken:
-        if not VerifyService.validate_session(body.sessionToken, body.sid):
-            return Result.error(message="会话已过期，请重新验证", code=403)
-        session_token = body.sessionToken
-    else:
-        result = VerifyService.verify_and_consume(body.token, body.sid, [a.model_dump() for a in body.answers], client_ip, openid)
-        if not result:
-            return Result.error(message="验证失败，请确认成绩是否正确", code=403)
-        session_token = result
+    session_token = verify_request(body, request)
 
     student = StudentService.get_student_by_id(db, body.sid)
     if not student:
@@ -50,18 +32,14 @@ def get_score_by_id(body: VerifiedQueryDTO, request: Request, db: Session = Depe
     return Result.success(data={"sessionToken": session_token, "queryData": query_dto.model_dump()})
 
 @router.get("/name", response_model=Result[List[str]])
-def get_course_name(cname: str = Query(..., alias="cname", max_length=50), wxToken: str = "", db: Session = Depends(get_db)):
-    if not _check_wx(wxToken):
-        return Result.error(message="请通过微信小程序访问", code=401)
+def get_course_name(cname: str = Query(..., alias="cname", max_length=50), db: Session = Depends(get_db)):
     names = CourseScoreService.get_course_names(db, cname)
     if not names:
         return Result.error(message="没有匹配课程")
     return Result.success(data=names)
 
 @router.get("/filter", response_model=Result[CourseInfoFilterDTO])
-def get_course_info_filter_by_name(courseName: str = Query(..., max_length=50), wxToken: str = "", db: Session = Depends(get_db)):
-    if not _check_wx(wxToken):
-        return Result.error(message="请通过微信小程序访问", code=401)
+def get_course_info_filter_by_name(courseName: str = Query(..., max_length=50), db: Session = Depends(get_db)):
     current_filter = CourseInfoFilterDTO(courseName=courseName)
     options = CourseScoreService.get_dynamic_filter_options(db, current_filter)
     if not options.terms:
@@ -70,14 +48,10 @@ def get_course_info_filter_by_name(courseName: str = Query(..., max_length=50), 
 
 @router.post("/filter/dynamic", response_model=Result[CourseInfoFilterDTO])
 def get_dynamic_filter_options(currentFilter: CourseInfoFilterDTO = Body(...), db: Session = Depends(get_db)):
-    if not _check_wx(currentFilter.wxToken):
-        return Result.error(message="请通过微信小程序访问", code=401)
     options = CourseScoreService.get_dynamic_filter_options(db, currentFilter)
     return Result.success(data=options)
 
 @router.post("/fail-rate", response_model=Result[FailRateStatisDTO])
 def get_fail_rate_statis(filter: CourseInfoFilterDTO = Body(...), db: Session = Depends(get_db)):
-    if not _check_wx(filter.wxToken):
-        return Result.error(message="请通过微信小程序访问", code=401)
     stats = CourseScoreService.get_fail_rate_statistics(db, filter)
     return Result.success(data=stats)

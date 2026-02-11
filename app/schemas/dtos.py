@@ -7,7 +7,6 @@ class CourseInfoFilterDTO(BaseModel):
     colleges: List[str] = []
     majors: List[str] = []
     classes: List[str] = []
-    wxToken: str = Field(default='', exclude=True)
     
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -41,14 +40,15 @@ class MajorRankingResponseDTO(BaseModel):
     grade: str = ''
     major: str = ''
     list: List[MajorRankItemDTO] = []
+    page: int = 1
+    pageSize: int = 35
 
 class RecFilterDTO(BaseModel):
     year: int
     college: Optional[str] = None
     major: Optional[str] = None
     page: int = 1
-    pageSize: int = 20
-    wxToken: str = Field(default='', exclude=True)
+    pageSize: int = 35
 
 class RecOptionsDTO(BaseModel):
     years: List[int] = []
@@ -76,7 +76,7 @@ class RecListResponseDTO(BaseModel):
     list: List[RecItemDTO] = []
     total: int = 0
     page: int = 1
-    pageSize: int = 20
+    pageSize: int = 35
 
 
 class ChallengeResponseDTO(BaseModel):
@@ -88,8 +88,7 @@ class VerifyAnswerItem(BaseModel):
     score: float
 
 class VerifiedQueryDTO(BaseModel):
-    sid: str
+    sid: str = Field(..., max_length=20)
     token: str = ''
     answers: List[VerifyAnswerItem] = []
     sessionToken: str = ''
-    wxToken: str = ''
